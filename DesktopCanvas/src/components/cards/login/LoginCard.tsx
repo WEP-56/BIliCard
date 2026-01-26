@@ -35,7 +35,7 @@ export const LoginCard: React.FC = () => {
 
       // Poll
       timerRef.current = setInterval(async () => {
-        const res = await BiliService.pollQRCode(qrData.qrcode_key)
+        const res = await BiliService.checkQRCode(qrData.qrcode_key)
         console.log('Poll result:', res) // Debug log
 
         if (res.data.code === 0) {
@@ -56,7 +56,7 @@ export const LoginCard: React.FC = () => {
             }
             
             // Fetch User Info
-            const info = await BiliService.getMyInfo()
+            const info = await BiliService.getNavUserInfo()
             if (info) {
                 setUserInfo(info)
             }
