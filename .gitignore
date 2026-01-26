@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+dist-electron/
+release/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+mpv-session-*.conf
+mpv-debug.log
+
+# Large Binaries (>100MB)
+DesktopCanvas/bin/mpv.exe
+DesktopCanvas/bin/libmpv-2.dll
+
+# Reference Projects (External)
+Bili.Copilot-master/
+bilibili-API-collect-master/
