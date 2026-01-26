@@ -403,13 +403,14 @@ function createWindow() {
     // Determine MPV Path
     // 1. Check local bin folder
     let mpvPath = 'mpv' // Default to PATH
-    const localBinPath = path.join(process.cwd(), 'bin', 'mpv.exe')
-    // On Windows, process.cwd() might not be what we expect in packaged app or some contexts
-    // Better to use app.getAppPath() or similar, but for dev:
-    // Try explicit path relative to __dirname first if needed, but let's debug path.
-    
-    // Fix: In dev mode, process.cwd() is usually project root (e:\BiliCard\DesktopCanvas)
-    // But let's log specifically what we found.
+    const isPackaged = app.isPackaged
+    // In packaged app, resources are usually at appPath/../resources (Windows/Linux)
+    // Or inside appPath/Contents/Resources (macOS)
+    // process.resourcesPath is the reliable way in Electron
+    const localBinPath = isPackaged 
+        ? path.join(process.resourcesPath, 'bin', 'mpv.exe')
+        : path.join(process.cwd(), 'bin', 'mpv.exe')
+
     if (fs.existsSync(localBinPath)) {
         mpvPath = localBinPath
         console.log('Found local MPV at:', mpvPath)
@@ -417,8 +418,6 @@ function createWindow() {
         console.warn('Local MPV not found at:', localBinPath, 'Trying system PATH')
     }
 
-    const configPath = path.join(process.cwd(), 'bin', 'mpv.conf')
-    
     // Construct HTTP Headers
     // Note: To avoid command line parsing issues with spaces/special chars in Windows,
     // we will write a temporary config file for MPV to load.
@@ -433,7 +432,9 @@ function createWindow() {
     const pipeName = `\\\\.\\pipe\\mpv-ipc-${Date.now()}`
     
     // Create a temporary config file for this session
-    const tempConfigPath = path.join(process.cwd(), `mpv-session-${Date.now()}.conf`)
+    // Use app.getPath('temp') to avoid pollution and permission issues
+    const tempDir = app.getPath('temp')
+    const tempConfigPath = path.join(tempDir, `mpv-session-${Date.now()}.conf`)
     const configContent = `http-header-fields=${headers}\ninput-ipc-server=${pipeName}\n`
     
     try {
@@ -449,7 +450,7 @@ function createWindow() {
         '--keep-open',
         `--include=${tempConfigPath}`, // Include the temp config
         // '--msg-level=all=v', 
-        // `--log-file=${path.join(process.cwd(), 'mpv-debug.log')}` 
+        // `--log-file=${path.join(tempDir, 'mpv-debug.log')}` 
     ]
     
     console.log('Spawning with args:', args)

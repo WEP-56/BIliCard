@@ -4,7 +4,13 @@ BiliCard 是一个基于 Electron + React 的 Bilibili 桌面挂件应用，旨�
 
 它采用独特的“便签小组件”设计，支持桌面吸附、悬浮窗播放、直播弹幕等功能。
 
-![Screenshot](https://via.placeholder.com/800x450?text=BiliCard+Screenshot)
+✨ 常驻桌面的小菜单
+![Screenshot](\exampleimg\img1.png)
+✨ 视频搜索与播放
+![Screenshot](\exampleimg\img2.png)
+✨ 直播搜索与播放
+![Screenshot](\exampleimg\img3.png)
+
 
 ## ✨ 特性
 

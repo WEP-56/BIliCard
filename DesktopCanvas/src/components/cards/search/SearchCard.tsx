@@ -71,6 +71,7 @@ export const SearchCard: React.FC = () => {
                   alt={video.title} 
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
                   loading="lazy"
+                  referrerPolicy="no-referrer"
               />
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 transition-opacity">
                   <PlayCircle className="text-white drop-shadow-md" size={24} />
