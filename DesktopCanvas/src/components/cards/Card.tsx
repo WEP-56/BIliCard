@@ -10,6 +10,7 @@ import { DynamicCard } from './dynamic/DynamicCard'
 import { BangumiCard } from './bangumi/BangumiCard'
 import { VideoPlayer } from './detail/VideoPlayer'
 import { LiveCard } from './live/LiveCard'
+import { LivePlayer } from './live/LivePlayer'
 import { setIgnoreMouseEvents } from '../../utils/ipc-mouse'
 
 interface CardProps {
@@ -153,6 +154,9 @@ export const Card: React.FC<CardProps> = React.memo(({ data }) => {
         {data.type === 'dynamic' && <DynamicCard />}
         {data.type === 'bangumi' && <BangumiCard />}
         {data.type === 'live' && <LiveCard />}
+        {data.type === 'live-player' && (
+            <LivePlayer {...data.content} cardId={data.id} />
+        )}
         
         {data.type === 'detail' && (
             <VideoPlayer {...data.content} cardId={data.id} />

@@ -30,18 +30,6 @@ export const FeedCard: React.FC = React.memo(() => {
           h: 800, // Increased height
           content: video
       })
-
-      // 2. Launch MPV immediately (as requested)
-      // We do NOT wait for this to finish to avoid blocking UI or state updates
-      try {
-        const info = await BiliService.getVideoInfo(video.bvid)
-        const playUrl = await BiliService.getPlayUrl(video.bvid, info.cid)
-        if (playUrl) {
-            window.ipcRenderer.invoke('spawn-mpv', playUrl, video.title)
-        }
-      } catch (e) {
-        console.error('Failed to auto-launch MPV:', e)
-      }
   }
 
   if (loading) {

@@ -43,11 +43,13 @@ export const LoginCard: React.FC = () => {
             clearInterval(timerRef.current!)
             
             const url = new URL(res.data.url)
-            const sessdata = url.searchParams.get('SESSDATA')
-            const bili_jct = url.searchParams.get('bili_jct')
-            const dedeUserID = url.searchParams.get('DedeUserID')
+            const params = new URLSearchParams(url.search)
+            let cookieString = ''
             
-            const cookieString = `SESSDATA=${sessdata}; bili_jct=${bili_jct}; DedeUserID=${dedeUserID};`
+            params.forEach((value, key) => {
+                cookieString += `${key}=${value}; `
+            })
+            
             setCookie(cookieString)
             
             // Sync to Electron Session

@@ -37,42 +37,28 @@ export const LiveCard: React.FC = () => {
   }
 
   const handleRoomClick = async (room: LiveItem) => {
-      // Launch MPV directly
       try {
         // Get Real Room ID first
         const roomInfo = await BiliService.getLiveRoomInfo(room.roomid)
         const realRoomId = roomInfo?.room_id || room.roomid
 
-        // Get Danmaku Token (Important for stability!)
-        window.ipcRenderer.send('log', `Getting DanmuInfo for room ${realRoomId}...`)
-        const danmuInfo = await BiliService.getDanmuInfo(realRoomId)
-        const token = danmuInfo?.token
-        window.ipcRenderer.send('log', `DanmuInfo: ${token ? 'Token Found' : 'Token Missing'}, Hosts: ${danmuInfo?.host_list?.length || 0}`)
-        
-        if (!token) {
-            window.ipcRenderer.send('log', `Error: Danmaku Token is missing. Aborting danmaku connection.`)
-            // Depending on requirements, we might still want to play video, but without danmaku.
-            // For now, let's proceed but warn.
-        }
-
-        // We can pass the room URL directly to MPV if it supports it (via yt-dlp)
-        // Or resolve it to FLV. 
-        // For now, let's try resolving it to be safe, or just pass room URL if that fails.
-        const playUrl = await BiliService.getLivePlayUrl(realRoomId)
-        
-        // If we got a direct URL, use it. Otherwise fallback to web room URL.
-        const targetUrl = playUrl || `https://live.bilibili.com/${realRoomId}`
-        
-        window.ipcRenderer.send('log', `Spawning MPV for room ${realRoomId}`)
-        await window.ipcRenderer.invoke('spawn-mpv', targetUrl, `Live: ${room.uname}`)
-        window.ipcRenderer.send('log', `MPV Spawned. Connecting danmaku...`)
-        
-        // Start danmaku connection AFTER spawning MPV
-        // This ensures spawn-mpv's cleanup logic doesn't kill our new connection
-        window.ipcRenderer.invoke('connect-danmaku', realRoomId, token, userInfo?.mid || 0)
+        addCard({
+            id: `live-${realRoomId}`,
+            type: 'live-player',
+            title: `Live: ${room.uname}`,
+            x: 400,
+            y: 200,
+            w: 800,
+            h: 600,
+            content: {
+                roomId: realRoomId,
+                title: room.title,
+                uname: room.uname,
+                face: room.face
+            }
+        })
       } catch (e) {
-        console.error('Failed to launch live stream:', e)
-        window.ipcRenderer.send('log', `Failed to launch live stream: ${e}`)
+        console.error('Failed to open live stream:', e)
       }
   }
 

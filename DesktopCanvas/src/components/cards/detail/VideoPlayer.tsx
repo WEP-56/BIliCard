@@ -31,12 +31,93 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
   const [related, setRelated] = useState<any[]>([])
   const [comments, setComments] = useState<any[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [hasAutoPlayed, setHasAutoPlayed] = useState(false)
+  const [isWebviewReady, setIsWebviewReady] = useState(false)
   const autoPlayTriggered = useRef(false)
+  const webviewRef = useRef<any>(null)
 
   const addCard = useCardStore((state) => state.addCard)
   const removeCard = useCardStore((state) => state.removeCard)
+
+  // Inject CSS to Web Player
+  useEffect(() => {
+      const webview = webviewRef.current
+      if (webview && isPlaying) {
+          setIsWebviewReady(false) // Reset readiness on play start
+          const injectCSS = async () => {
+              try {
+                  await webview.insertCSS(`
+                      #bilibili-player {
+                          position: fixed !important;
+                          top: 0 !important;
+                          left: 0 !important;
+                          width: 100% !important;
+                          height: 100% !important;
+                          z-index: 10000 !important;
+                          background: black !important;
+                      }
+                      .bpx-player-container {
+                          box-shadow: none !important;
+                      }
+                      body {
+                          overflow: hidden !important;
+                          background: black !important;
+                      }
+                      
+                      /* Hide Header and Sidebar */
+                      #bili-header-container, 
+                      .bili-header,
+                      .left-container-under-player, 
+                      .right-container, 
+                      #v_upinfo, 
+                      .video-info-container, 
+                      .video-toolbar-container,
+                      .bili-footer,
+                      .palette-button-wrap,
+                      #activity_vote,
+                      .ad-report,
+                      .reply-header,
+                      .bili-comments-header-renderer,
+                      #bannerAd,
+                      .bili-grid,
+                      .bili-layout,
+                      .sidenav,
+                      .fixed-sidenav-storage,
+                      .report-scroll-module,
+                      .bili-pendant,
+                      .tool-bar,
+                      .video-float-dialog,
+                      .video-float-card,
+                      .side-bar,
+                      .nav-tools,
+                      [class*="storage-box"],
+                      [class*="contact-help"],
+                      [class*="back-top"] {
+                          display: none !important;
+                      }
+                  `)
+                  // Fade in after CSS injection
+                  setTimeout(() => setIsWebviewReady(true), 100)
+              } catch (e) {
+                  console.error('Failed to inject CSS', e)
+                  setIsWebviewReady(true) // Fallback to show even if error
+              }
+          }
+          
+          const handleLoadError = (e: any) => {
+              console.error('Webview load error:', e.errorCode, e.errorDescription)
+              setIsWebviewReady(true) // Show webview even if error occurs so user can see it
+          }
+
+          webview.addEventListener('dom-ready', injectCSS)
+          webview.addEventListener('did-fail-load', handleLoadError)
+          
+          return () => { 
+              webview.removeEventListener('dom-ready', injectCSS)
+              webview.removeEventListener('did-fail-load', handleLoadError)
+          }
+      }
+  }, [isPlaying])
 
   // Fetch details
   useEffect(() => {
@@ -59,53 +140,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
 
   // Auto-play effect
   useEffect(() => {
-      if (autoPlay && detail && !isPlaying && !loading && !hasAutoPlayed && !autoPlayTriggered.current) {
+      if (autoPlay && detail && !isPlaying && !hasAutoPlayed && !autoPlayTriggered.current) {
           autoPlayTriggered.current = true
           setHasAutoPlayed(true)
-          handlePlay()
+          setIsPlaying(true)
       }
-  }, [autoPlay, detail, isPlaying, loading, hasAutoPlayed])
+  }, [autoPlay, detail, isPlaying, hasAutoPlayed])
 
-  // Cleanup MPV on unmount
-  useEffect(() => {
-    return () => {
-        // Stop MPV when card is closed
-        if ((window as any).ipcRenderer) {
-            (window as any).ipcRenderer.invoke('stop-mpv')
-        }
-    }
-  }, [])
-
-  const handlePlay = async () => {
-    if (isPlaying) return
-    
-    const cidToUse = detail?.cid || initialCid
-    if (!cidToUse) {
-        console.error('No CID available')
-        return
-    }
-
-    setLoading(true)
-    try {
-        const url = await biliService.getPlayUrl(bvid, cidToUse)
-        if (url && (window as any).ipcRenderer) {
-            await (window as any).ipcRenderer.invoke('spawn-mpv', url)
-            setIsPlaying(true)
-        }
-    } catch (e) {
-        console.error('Failed to play', e)
-    } finally {
-        setLoading(false)
-    }
+  const handlePlay = () => {
+    setIsPlaying(true)
   }
-
-  // Auto-play effect
-  useEffect(() => {
-      if (autoPlay && detail && !isPlaying && !loading && !hasAutoPlayed) {
-          setHasAutoPlayed(true)
-          handlePlay()
-      }
-  }, [autoPlay, detail, isPlaying, loading, hasAutoPlayed])
 
   const handleRelatedClick = (item: any) => {
       if (cardId) {
@@ -113,7 +157,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
       }
       
       // Delay adding new card to ensure clean state transition if needed
-      // and to let the UI update (card removal animation if any)
       setTimeout(() => {
           addCard({
               id: `video-${item.bvid}`,
@@ -147,21 +190,40 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
           {/* Hero / Player Placeholder */}
           <div className="aspect-video bg-black relative group">
               <img src={displayPic} className="w-full h-full object-cover opacity-80" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                  {!isPlaying ? (
-                      <button 
-                        onClick={handlePlay}
-                        disabled={loading}
-                        className="bg-pink-500 hover:bg-pink-600 text-white rounded-full p-4 transition-transform transform group-hover:scale-110 shadow-lg"
-                      >
-                          {loading ? <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" /> : <PlayCircle size={48} fill="white" />}
-                      </button>
-                  ) : (
-                      <div className="text-white bg-black/50 px-4 py-2 rounded backdrop-blur-sm">
-                          Playing on MPV
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  {!isPlaying && (
+                      <div className="pointer-events-auto">
+                        <button 
+                            onClick={handlePlay}
+                            className="bg-pink-500 hover:bg-pink-600 text-white rounded-full p-4 transition-transform transform hover:scale-110 shadow-lg flex items-center gap-2"
+                        >
+                            <PlayCircle size={48} fill="white" />
+                        </button>
                       </div>
                   )}
               </div>
+              
+              {/* Web Player Overlay */}
+              {isPlaying && (
+                  <div className="absolute inset-0 z-20 bg-black">
+                      <webview
+                        ref={webviewRef}
+                        src={`https://www.bilibili.com/video/${bvid}?autoplay=1`}
+                        className="w-full h-full transition-opacity duration-300"
+                        style={{ opacity: isWebviewReady ? 1 : 0 }}
+                        // partition="persist:bilibili" // Use default session
+                        allowpopups="true"
+                        webpreferences="contextIsolation=no, nodeIntegration=no"
+                        // @ts-ignore
+                      />
+                      <button 
+                        onClick={() => setIsPlaying(false)}
+                        className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded hover:bg-black/70 z-30"
+                      >
+                          Close
+                      </button>
+                  </div>
+              )}
           </div>
 
           {/* Sticky Tabs */}
@@ -270,10 +332,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
                                       </span>
                                       <span className="cursor-pointer hover:text-gray-600">Reply</span>
                                   </div>
+                                  
+                                  {/* Sub-comments (Replies) */}
+                                  {item.replies && item.replies.length > 0 && (
+                                      <div className="mt-2 bg-gray-50 p-3 rounded text-sm space-y-2">
+                                          {item.replies.map((reply: any) => (
+                                              <div key={reply.rpid} className="flex gap-2">
+                                                  <span className="font-medium text-gray-600 whitespace-nowrap">{reply.member.uname}:</span>
+                                                  <span className="text-gray-700">{reply.content.message}</span>
+                                              </div>
+                                          ))}
+                                          {item.replies.length >= 3 && (
+                                               <div className="text-blue-500 text-xs cursor-pointer hover:underline">
+                                                  View all replies
+                                               </div>
+                                          )}
+                                      </div>
+                                  )}
                               </div>
                           </div>
                       ))}
-                      {comments.length === 0 && <div className="text-center text-gray-500 py-8">Loading comments...</div>}
+                      {comments.length === 0 && <div className="text-center text-gray-500 py-8">No comments yet.</div>}
                   </div>
               )}
           </div>
@@ -282,28 +361,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
   )
 })
 
+// Helpers
+const formatNumber = (num: number) => {
+    if (num >= 10000) return (num / 10000).toFixed(1) + 'w'
+    return num
+}
+
+const formatDate = (ts: number) => {
+    if (!ts) return ''
+    return new Date(ts * 1000).toLocaleDateString()
+}
+
+const formatDuration = (sec: number) => {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 const ActionBtn = ({ icon: Icon, label }: any) => (
-    <div className="flex flex-col items-center gap-1 text-gray-500 cursor-pointer hover:text-pink-600 transition-colors">
+    <button className="flex flex-col items-center gap-1 text-gray-500 hover:text-pink-500 transition-colors p-2 rounded hover:bg-gray-100">
         <Icon size={20} />
         <span className="text-xs">{label}</span>
-    </div>
+    </button>
 )
-
-function formatNumber(num: number) {
-    if (!num) return '0'
-    if (num > 10000) return `${(num / 10000).toFixed(1)}w`
-    return num.toString()
-}
-
-function formatDate(timestamp: number) {
-    if (!timestamp) return ''
-    const date = new Date(timestamp * 1000)
-    return date.toLocaleDateString()
-}
-
-function formatDuration(seconds: number) {
-    if (!seconds) return '0:00'
-    const min = Math.floor(seconds / 60)
-    const sec = seconds % 60
-    return `${min}:${sec.toString().padStart(2, '0')}`
-}

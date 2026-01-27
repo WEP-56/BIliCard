@@ -1,5 +1,6 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { useGesture } from '@use-gesture/react'
+import { useSpring, animated } from '@react-spring/web'
 import { useShallow } from 'zustand/react/shallow'
 import { useCanvasStore } from '../../store/useCanvasStore'
 import { useCardStore } from '../../store/useCardStore'
@@ -9,20 +10,7 @@ import { Lock, Unlock, Plus, Search, User, Zap, Tv, LogOut, Radio } from 'lucide
 import { useUserStore } from '../../store/useUserStore'
 import { setIgnoreMouseEvents } from '../../utils/ipc-mouse'
 
-// Wrapper for UI elements to make them interactive
-const Interactive: React.FC<{ children: React.ReactNode, className?: string }> = ({ children, className }) => (
-    <div 
-      className={className}
-      onMouseEnter={() => setIgnoreMouseEvents(false)}
-      onMouseLeave={() => setIgnoreMouseEvents(true)}
-      onPointerDown={(e) => {
-          // Ensure clicks on interactive elements don't bubble up to unexpected places
-          // e.stopPropagation() 
-      }}
-    >
-        {children}
-    </div>
-)
+
 
 export const Canvas: React.FC = () => {
   // We only need isLocked from store, no viewport logic needed anymore
@@ -31,6 +19,25 @@ export const Canvas: React.FC = () => {
   const addCard = useCardStore((state) => state.addCard)
   const userInfo = useUserStore((state) => state.userInfo)
   const canvasRef = useRef<HTMLDivElement>(null)
+
+  // Dock Drag Logic
+  const [{ x, y }, api] = useSpring(() => ({ x: 0, y: 0 }))
+  const [isDragging, setIsDragging] = useState(false)
+  
+  const bindDock = useGesture({
+      onDragStart: () => {
+          setIsDragging(true)
+          setIgnoreMouseEvents(false)
+      },
+      onDrag: ({ offset: [ox, oy] }) => api.start({ x: ox, y: oy }),
+      onDragEnd: () => {
+          setIsDragging(false)
+      }
+  }, {
+      drag: {
+          from: () => [x.get(), y.get()]
+      }
+  })
 
   return (
     <div
@@ -47,7 +54,16 @@ export const Canvas: React.FC = () => {
       ))}
 
       {/* Floating Dock (Right Bottom) */}
-      <Interactive className="fixed bottom-6 right-6 flex items-center gap-2 bg-white/90 backdrop-blur shadow-lg border border-gray-200/50 p-2 rounded-2xl transition-all hover:scale-105 z-[9999]">
+      <animated.div 
+          {...bindDock()} 
+          style={{ x, y, touchAction: 'none' }} 
+          className="fixed bottom-6 right-6 z-[9999]"
+          onMouseEnter={() => setIgnoreMouseEvents(false)}
+          onMouseLeave={() => {
+              if (!isDragging) setIgnoreMouseEvents(true)
+          }}
+      >
+          <div className="flex items-center gap-2 bg-white/90 backdrop-blur shadow-lg border border-gray-200/50 p-2 rounded-2xl transition-all hover:scale-105 cursor-grab active:cursor-grabbing">
           <button 
              onClick={() => {
                  addCard({
@@ -185,7 +201,8 @@ export const Canvas: React.FC = () => {
          >
             <LogOut size={20} />
          </button>
-      </Interactive>
+      </div>
+      </animated.div>
     </div>
   )
 }
