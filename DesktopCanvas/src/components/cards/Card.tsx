@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import { useGesture } from '@use-gesture/react'
 import { useCardStore, type CardState } from '../../store/useCardStore'
 import { useCanvasStore } from '../../store/useCanvasStore'
-import { X, Pin } from 'lucide-react'
+import { X, Pin, Maximize2, Minimize2 } from 'lucide-react'
 import { FeedCard } from './feed/FeedCard'
 import { SearchCard } from './search/SearchCard'
 import { LoginCard } from './login/LoginCard'
@@ -11,6 +11,10 @@ import { BangumiCard } from './bangumi/BangumiCard'
 import { VideoPlayer } from './detail/VideoPlayer'
 import { LiveCard } from './live/LiveCard'
 import { LivePlayer } from './live/LivePlayer'
+import { HistoryCard } from './history/HistoryCard'
+import { ToViewCard } from './toview/ToViewCard'
+import { FavoritesCard } from './favorites/FavoritesCard'
+import { SettingsCard } from './settings/SettingsCard'
 import { setIgnoreMouseEvents } from '../../utils/ipc-mouse'
 
 interface CardProps {
@@ -33,6 +37,34 @@ export const Card: React.FC<CardProps> = React.memo(({ data }) => {
         setIgnoreMouseEvents(true)
     }
   }, [])
+
+  const [isMaximized, setIsMaximized] = React.useState(false)
+  const previousDimensions = useRef({ x: data.x, y: data.y, w: data.w, h: data.h })
+
+  const toggleMaximize = () => {
+      if (isMaximized) {
+          // Restore
+          updateCard(data.id, {
+              x: previousDimensions.current.x,
+              y: previousDimensions.current.y,
+              w: previousDimensions.current.w,
+              h: previousDimensions.current.h,
+              zIndex: data.zIndex // Keep current zIndex or restore? Usually keep high.
+          })
+          setIsMaximized(false)
+      } else {
+          // Maximize
+          previousDimensions.current = { x: data.x, y: data.y, w: data.w, h: data.h }
+          updateCard(data.id, {
+              x: 0,
+              y: 0,
+              w: window.innerWidth,
+              h: window.innerHeight,
+              zIndex: 9999 // Ensure it's on top
+          })
+          setIsMaximized(true)
+      }
+  }
 
   const bind = useGesture(
     {
@@ -115,6 +147,19 @@ export const Card: React.FC<CardProps> = React.memo(({ data }) => {
            {data.title}
         </div>
         <div className="flex items-center gap-1">
+            {(data.type === 'detail' || data.type === 'live-player') && (
+                <button 
+                    className="p-1 hover:bg-gray-100 rounded transition-colors text-gray-400"
+                    onPointerDown={(e) => { e.stopPropagation(); }}
+                    onClick={(e) => { 
+                        e.stopPropagation(); 
+                        toggleMaximize(); 
+                    }}
+                    title={isMaximized ? "Restore" : "Maximize"}
+                >
+                    {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                </button>
+            )}
             <button 
                 className={`p-1 rounded transition-colors ${data.isLocked ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100 text-gray-400'}`}
                 onPointerDown={(e) => { e.stopPropagation(); }}
@@ -154,6 +199,10 @@ export const Card: React.FC<CardProps> = React.memo(({ data }) => {
         {data.type === 'dynamic' && <DynamicCard />}
         {data.type === 'bangumi' && <BangumiCard />}
         {data.type === 'live' && <LiveCard />}
+        {data.type === 'history' && <HistoryCard />}
+        {data.type === 'toview' && <ToViewCard />}
+        {data.type === 'favorites' && <FavoritesCard />}
+        {data.type === 'settings' && <SettingsCard />}
         {data.type === 'live-player' && (
             <LivePlayer {...data.content} cardId={data.id} />
         )}

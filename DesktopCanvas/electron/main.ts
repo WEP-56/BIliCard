@@ -11,12 +11,12 @@ app.commandLine.appendSwitch('disable-features', 'SameSiteByDefaultCookies,Cooki
 app.commandLine.appendSwitch('disable-site-isolation-trials')
 
 // Disable IPv6 to prevent DNS resolution issues with STUN/WebRTC
-app.commandLine.appendSwitch('enable-features', 'BlockInsecurePrivateNetworkRequests')
-app.commandLine.appendSwitch('enable-quic')
-app.commandLine.appendSwitch('disable-features', 'AsyncDns')
+// app.commandLine.appendSwitch('enable-features', 'BlockInsecurePrivateNetworkRequests')
+// app.commandLine.appendSwitch('enable-quic')
+// app.commandLine.appendSwitch('disable-features', 'AsyncDns')
 
 // Disable hardware acceleration to fix video black screen in transparent window
-app.disableHardwareAcceleration()
+// app.disableHardwareAcceleration()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -122,7 +122,8 @@ function createWindow() {
   const configureSession = (sess: Electron.Session) => {
       // Force User-Agent for all requests to avoid Bilibili blocking/handshake issues
       // Use standard Chrome UA instead of Edge to minimize fingerprinting
-      sess.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+      const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      sess.setUserAgent(USER_AGENT)
 
       sess.webRequest.onBeforeSendHeaders((details, callback) => {
         const url = details.url
@@ -130,125 +131,45 @@ function createWindow() {
 
         const isRendererRequest = !!headers['X-Bili-Cookie']
 
-        // ======== LIVE: Zero-Hijack / Pass-through ========
-        if (
-            !isRendererRequest && 
-            (
-                url.includes('live.bilibili.com') ||
-                url.includes('api.live.bilibili.com') ||
-                (url.includes('wss://') && url.includes('live')) || 
-                (url.includes('chat.bilibili.com'))
-            )
-        ) {
-            // Ensure Referer/Origin are correct for WebSocket/WebRTC handshake
-            if (url.includes('chat.bilibili.com') || url.includes('wss://')) {
-                headers['Origin'] = 'https://live.bilibili.com'
-                headers['Referer'] = 'https://live.bilibili.com/'
-            }
-            return callback({ requestHeaders: headers })
-        }
-        // =================================================
-    
-        // Only modify Referer for Bilibili domains
-        if (url.includes('bilibili.com')) {
-          // Check if this is a request from our Renderer (Custom Header)
-          // const isRendererRequest = !!headers['X-Bili-Cookie'] // Already defined above
-          
-          // Check if this is an image load (likely from Canvas)
-          const isImage = details.resourceType === 'image'
-          
-          // 1. Handle User-Agent
-          if (isRendererRequest || isImage) {
-              // Bilibili might block 'Electron'. Let's use a safe Edge/Chrome UA.
-              headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0'
-          }
-    
-          // 2. Handle Cookies injection from Renderer
-          if (headers['X-Bili-Cookie']) {
-            // Strip any potential trailing semicolons or spaces
+        // Handle Cookie Injection
+        if (headers['X-Bili-Cookie']) {
             const cleanCookie = headers['X-Bili-Cookie'].trim().replace(/;$/, '')
             headers['Cookie'] = cleanCookie
             delete headers['X-Bili-Cookie']
-          } else if (globalCookies && !headers['Cookie']) {
+        } else if (globalCookies && !headers['Cookie']) {
             headers['Cookie'] = globalCookies
-          }
-    
-          // 3. Referer Handling
-          // Generic Referer handling for API and Video Streams
-          const isApi = url.includes('api.bilibili.com') || url.includes('passport.bilibili.com') || url.includes('api.live.bilibili.com')
-          const isVideo = url.includes('bilivideo.com') || url.includes('hdslb.com') || url.includes('bilivideo.cn')
-          const isLive = url.includes('live.bilibili.com')
-          const isPassport = url.includes('passport.bilibili.com')
-          
-          if (isRendererRequest || isImage || isVideo || isApi || isLive) {
-              if (isPassport) {
-                  // For passport (login), allow the original Referer if present, or default to login page
-                  // Do NOT delete Origin for passport as it breaks CORS/Security checks
-                  if (!headers['Referer']) {
-                       headers['Referer'] = 'https://passport.bilibili.com/login'
-                  }
-              } else if (url.includes('player.bilibili.com')) {
-                  headers['Referer'] = 'https://www.bilibili.com/'
-              } else if (url.includes('search/type')) {
-                  try {
-                      const urlObj = new URL(url)
-                      const keyword = urlObj.searchParams.get('keyword')
-                      const searchType = urlObj.searchParams.get('search_type')
-                      
-                      if ((searchType === 'live' || searchType === 'live_room') && keyword) {
-                          headers['Referer'] = `https://search.bilibili.com/live?keyword=${encodeURIComponent(keyword)}`
-                      } else {
-                          headers['Referer'] = 'https://search.bilibili.com/all'
-                      }
-                  } catch (e) {
-                      headers['Referer'] = 'https://search.bilibili.com/all'
-                  }
-              } else if (url.includes('getDanmuInfo')) {
-                  try {
-                      const urlObj = new URL(url)
-                      const roomId = urlObj.searchParams.get('id')
-                      if (roomId) {
-                          headers['Referer'] = `https://live.bilibili.com/${roomId}`
-                      } else {
-                          headers['Referer'] = 'https://live.bilibili.com/'
-                      }
-                  } catch (e) {
-                      headers['Referer'] = 'https://live.bilibili.com/'
-                  }
-                  delete headers['Origin']
-              } else if (isLive || url.includes('/xlive/')) {
-                  headers['Referer'] = 'https://live.bilibili.com/'
-              } else {
-                  headers['Referer'] = 'https://www.bilibili.com/'
-              }
+        }
 
-              // Remove Origin to prevent 412 Precondition Failed for some WBI APIs
-              // But Keep it for Passport (Login) and Live API (needs correct Origin)
-              if (isApi && !url.includes('getDanmuInfo') && !isPassport) {
-                  if (url.includes('api.live.bilibili.com')) {
-                      headers['Origin'] = 'https://live.bilibili.com'
-                  } else {
-                      delete headers['Origin']
-                  }
-              }
-              
-              // Special handling for search/type API
-              if (url.includes('search/type')) {
-                  delete headers['Origin']
-              }
-          } else {
-              // Fallback
-              if (!headers['Referer']) {
-                  headers['Referer'] = 'https://www.bilibili.com/'
-              }
-          }
-        } else if (url.includes('bilivideo.com') || url.includes('hdslb.com') || url.includes('bilivideo.cn')) {
-            // Handle video domains
-            delete headers['Referer']
-            delete headers['Origin']
+        // Global User-Agent Override
+        headers['User-Agent'] = USER_AGENT
+
+        // Check if this is a request to Bilibili domains
+        const isBiliDomain = url.includes('bilibili.com') || url.includes('bilivideo.com') || url.includes('hdslb.com') || url.includes('bilivideo.cn')
+
+        if (isBiliDomain) {
+            // Default Referer to www.bilibili.com
+            // This is critical for the player to work
+            if (!headers['Referer'] || headers['Referer'].includes('file://') || headers['Referer'].includes('localhost')) {
+                headers['Referer'] = 'https://www.bilibili.com/'
+            }
             
-            headers['Referer'] = 'https://www.bilibili.com/'
-            headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            // Fix Origin for API/Player requests
+            // Bilibili API often checks Origin matching the domain
+            if (!headers['Origin'] || headers['Origin'].includes('file://') || headers['Origin'].includes('localhost')) {
+                // For live.bilibili.com, Origin must be https://live.bilibili.com
+                if (url.includes('live.bilibili.com') || url.includes('api.live.bilibili.com')) {
+                    headers['Origin'] = 'https://live.bilibili.com'
+                    headers['Referer'] = 'https://live.bilibili.com/'
+                } else {
+                     headers['Origin'] = 'https://www.bilibili.com'
+                }
+            }
+
+            // Special Case: Search API
+            if (url.includes('search/type')) {
+                // Search API is sensitive to Origin, sometimes prefers it removed or matching
+                delete headers['Origin']
+            }
         }
     
         callback({ requestHeaders: headers })
@@ -257,16 +178,6 @@ function createWindow() {
       // Strip X-Frame-Options to allow loading in iframe and inject CORS
       sess.webRequest.onHeadersReceived((details, callback) => {
         const url = details.url
-
-        // ======== LIVE: Zero-Hijack / Pass-through ========
-        if (
-            url.includes('live.bilibili.com') ||
-            url.includes('api.live.bilibili.com')
-        ) {
-            return callback({ responseHeaders: details.responseHeaders })
-        }
-        // =================================================
-
         const responseHeaders = details.responseHeaders || {}
         
         // Remove X-Frame-Options and CSP to allow iframe loading and script/style injection

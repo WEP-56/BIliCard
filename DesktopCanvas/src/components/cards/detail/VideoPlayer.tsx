@@ -215,7 +215,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
       <div className="flex-1 overflow-y-auto custom-scrollbar relative">
           {/* Hero / Player Placeholder */}
           <div className="aspect-video bg-black relative group">
-              <img src={displayPic} className="w-full h-full object-cover opacity-80" />
+              {displayPic ? (
+                  <img src={displayPic} className="w-full h-full object-cover opacity-80" />
+              ) : null}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   {!isPlaying && (
                       <div className="pointer-events-auto">
@@ -289,7 +291,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
                       </div>
 
                       <div className="flex items-center gap-3 py-3 border-y border-gray-100">
-                          <img src={displayOwner.face} className="w-10 h-10 rounded-full border border-gray-100" />
+                          {displayOwner.face ? (
+                              <img src={displayOwner.face} className="w-10 h-10 rounded-full border border-gray-100" />
+                          ) : (
+                              <div className="w-10 h-10 rounded-full border border-gray-100 bg-gray-200 flex items-center justify-center">
+                                  <User size={20} className="text-gray-400" />
+                              </div>
+                          )}
                           <div className="flex-1">
                               <div className="font-medium text-pink-600">{displayOwner.name}</div>
                               <div className="text-xs text-gray-400">{detail?.owner?.mid}</div>

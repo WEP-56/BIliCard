@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
-import { BiliService, type VideoItem } from '../../../services/bili-service'
-import { Search, PlayCircle } from 'lucide-react'
+import { BiliService, type VideoItem, type LiveItem } from '../../../services/bili-service'
+import { Search, PlayCircle, Video, Radio } from 'lucide-react'
 import { useCardStore } from '../../../store/useCardStore'
 
 export const SearchCard: React.FC = () => {
   const [keyword, setKeyword] = useState('')
+  const [searchType, setSearchType] = useState<'video' | 'live'>('video')
   const [videos, setVideos] = useState<VideoItem[]>([])
+  const [lives, setLives] = useState<LiveItem[]>([])
   const [loading, setLoading] = useState(false)
   const addCard = useCardStore((state) => state.addCard)
 
@@ -14,8 +16,15 @@ export const SearchCard: React.FC = () => {
     if (!keyword.trim()) return
 
     setLoading(true)
-    const items = await BiliService.searchVideos(keyword)
-    setVideos(items)
+    if (searchType === 'video') {
+        const items = await BiliService.searchVideos(keyword)
+        setVideos(items)
+        setLives([])
+    } else {
+        const items = await BiliService.searchLive(keyword)
+        setLives(items)
+        setVideos([])
+    }
     setLoading(false)
   }
 
@@ -27,69 +36,125 @@ export const SearchCard: React.FC = () => {
           x: 400,
           y: 200,
           w: 800,
-          h: 800, // Increased height
+          h: 800,
           content: video
       })
   }
 
+  const handleLiveClick = async (live: LiveItem) => {
+      try {
+        const roomInfo = await BiliService.getLiveRoomInfo(live.roomid)
+        const realRoomId = roomInfo?.room_id || live.roomid
+
+        addCard({
+            id: `live-${realRoomId}`,
+            type: 'live-player',
+            title: `Live: ${live.uname}`,
+            x: 400,
+            y: 200,
+            w: 800,
+            h: 600,
+            content: {
+                roomId: realRoomId,
+                title: live.title,
+                uname: live.uname,
+                face: live.face
+            }
+        })
+      } catch (e) {
+        console.error(e)
+      }
+  }
+
   return (
-    <div className="flex flex-col h-full">
-      <form onSubmit={handleSearch} className="p-3 border-b flex gap-2">
-        <input
-            type="text"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="Search Bilibili..."
-            className="flex-1 px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            onPointerDown={(e) => e.stopPropagation()} // Allow typing without dragging
-        />
-        <button 
-            type="submit"
-            className="p-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-        >
-            <Search size={16} />
-        </button>
-      </form>
-
-      <div className="flex-1 overflow-auto p-2 space-y-3">
-        {loading && <div className="text-center text-gray-500 py-4">Searching...</div>}
-        
-        {!loading && videos.length === 0 && keyword && (
-             <div className="text-center text-gray-400 py-4">No results found</div>
-        )}
-
-        {videos.map((video) => (
-          <div 
-              key={video.bvid} 
-              className="group flex gap-3 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
-              onClick={() => handleVideoClick(video)}
-          >
-            {/* Thumbnail */}
-            <div className="relative w-32 h-20 flex-shrink-0 rounded overflow-hidden bg-gray-200">
-              <img 
-                  src={video.pic} 
-                  alt={video.title} 
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 transition-opacity">
-                  <PlayCircle className="text-white drop-shadow-md" size={24} />
-              </div>
-            </div>
-            
-            {/* Meta */}
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-gray-800 line-clamp-2 leading-tight mb-1" title={video.title}>
-                  {video.title}
-              </h3>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className="bg-gray-100 px-1 rounded text-gray-600">{video.owner.name}</span>
-                  <span>{video.stat.view} views</span>
-              </div>
-            </div>
+    <div className="flex flex-col h-full bg-white">
+      {/* Search Header */}
+      <div className="p-3 border-b border-gray-100 space-y-2 sticky top-0 bg-white z-10">
+          <form onSubmit={handleSearch} className="relative">
+            <input 
+                type="text" 
+                placeholder={searchType === 'video' ? "Search Videos..." : "Search Live Rooms..."}
+                className="w-full pl-9 pr-4 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 transition-all"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                onPointerDown={(e) => e.stopPropagation()}
+            />
+            <button 
+                type="submit"
+                className="absolute left-3 top-2.5 text-gray-400 hover:text-pink-500 transition-colors"
+            >
+                <Search size={16} />
+            </button>
+          </form>
+          
+          {/* Tabs */}
+          <div className="flex gap-2">
+              <button 
+                  onClick={() => setSearchType('video')}
+                  className={`flex-1 py-1 text-xs rounded-lg flex items-center justify-center gap-1 transition-colors ${searchType === 'video' ? 'bg-pink-50 text-pink-600 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                  <Video size={14} /> Video
+              </button>
+              <button 
+                  onClick={() => setSearchType('live')}
+                  className={`flex-1 py-1 text-xs rounded-lg flex items-center justify-center gap-1 transition-colors ${searchType === 'live' ? 'bg-pink-50 text-pink-600 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                  <Radio size={14} /> Live
+              </button>
           </div>
-        ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-2">
+        {loading ? (
+            <div className="text-center text-gray-500 py-10">Searching...</div>
+        ) : (
+            <div className="grid grid-cols-1 gap-2">
+                {searchType === 'video' && videos.map((video) => (
+                    <div 
+                        key={video.bvid} 
+                        className="flex gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
+                        onClick={() => handleVideoClick(video)}
+                    >
+                        <div className="relative w-24 h-14 flex-shrink-0 rounded overflow-hidden bg-gray-200">
+                            <img src={video.pic} className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+                            <div className="absolute bottom-0.5 right-1 text-[10px] text-white bg-black/50 px-1 rounded">
+                                {video.duration}
+                            </div>
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <div className="text-sm font-medium line-clamp-2 leading-tight" title={video.title}>{video.title}</div>
+                            <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                <span>{video.owner.name}</span>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+
+                {searchType === 'live' && lives.map((live) => (
+                    <div 
+                        key={live.roomid} 
+                        className="flex gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
+                        onClick={() => handleLiveClick(live)}
+                    >
+                        <div className="relative w-24 h-14 flex-shrink-0 rounded overflow-hidden bg-gray-200">
+                            <img src={live.cover || live.face} className="w-full h-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+                            <div className="absolute top-0.5 right-0.5 bg-pink-500 text-white text-[8px] px-1 rounded">
+                                {live.online ? 'LIVE' : 'OFF'}
+                            </div>
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <div className="text-sm font-medium line-clamp-1 leading-tight" title={live.title}>{live.title}</div>
+                            <div className="text-xs text-gray-500 mt-1">{live.uname}</div>
+                        </div>
+                    </div>
+                ))}
+                
+                {!loading && ((searchType === 'video' && videos.length === 0) || (searchType === 'live' && lives.length === 0)) && (
+                    <div className="text-center text-gray-400 py-10 text-sm">No results</div>
+                )}
+            </div>
+        )}
       </div>
     </div>
   )

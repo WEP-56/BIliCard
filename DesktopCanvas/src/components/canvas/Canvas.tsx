@@ -6,7 +6,7 @@ import { useCanvasStore } from '../../store/useCanvasStore'
 import { useCardStore } from '../../store/useCardStore'
 import { Card } from '../cards/Card'
 
-import { Lock, Unlock, Plus, Search, User, Zap, Tv, LogOut, Radio } from 'lucide-react'
+import { Lock, Unlock, Plus, Search, User, Zap, Tv, LogOut, Radio, Clock, Bookmark, Star, Flame, Settings } from 'lucide-react'
 import { useUserStore } from '../../store/useUserStore'
 import { setIgnoreMouseEvents } from '../../utils/ipc-mouse'
 
@@ -19,23 +19,34 @@ export const Canvas: React.FC = () => {
   const addCard = useCardStore((state) => state.addCard)
   const userInfo = useUserStore((state) => state.userInfo)
   const canvasRef = useRef<HTMLDivElement>(null)
+  
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
   // Dock Drag Logic
-  const [{ x, y }, api] = useSpring(() => ({ x: 0, y: 0 }))
+  const [dockPosition, setDockPosition] = useState({ x: 0, y: 0 })
+  const dockRef = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   
+  const [isDockLocked, setIsDockLocked] = useState(false)
+
   const bindDock = useGesture({
       onDragStart: () => {
+          if (isDockLocked) return
           setIsDragging(true)
           setIgnoreMouseEvents(false)
       },
-      onDrag: ({ offset: [ox, oy] }) => api.start({ x: ox, y: oy }),
-      onDragEnd: () => {
+      onDrag: ({ movement: [mx, my] }) => {
+          if (isDockLocked) return
+          if (dockRef.current) {
+              const newX = dockPosition.x + mx
+              const newY = dockPosition.y + my
+              dockRef.current.style.transform = `translate(${newX}px, ${newY}px)`
+          }
+      },
+      onDragEnd: ({ movement: [mx, my] }) => {
+          if (isDockLocked) return
           setIsDragging(false)
-      }
-  }, {
-      drag: {
-          from: () => [x.get(), y.get()]
+          setDockPosition(prev => ({ x: prev.x + mx, y: prev.y + my }))
       }
   })
 
@@ -54,9 +65,10 @@ export const Canvas: React.FC = () => {
       ))}
 
       {/* Floating Dock (Right Bottom) */}
-      <animated.div 
+      <div 
+          ref={dockRef}
           {...bindDock()} 
-          style={{ x, y, touchAction: 'none' }} 
+          style={{ transform: `translate(${dockPosition.x}px, ${dockPosition.y}px)`, touchAction: 'none' }} 
           className="fixed bottom-6 right-6 z-[9999]"
           onMouseEnter={() => setIgnoreMouseEvents(false)}
           onMouseLeave={() => {
@@ -77,9 +89,9 @@ export const Canvas: React.FC = () => {
                  })
              }}
              className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-700"
-             title="Add Feed"
+             title="Recommended Feed"
           >
-             <Plus size={20} />
+             <Flame size={20} />
           </button>
           
           <button 
@@ -136,22 +148,69 @@ export const Canvas: React.FC = () => {
              <Tv size={20} />
           </button>
 
+          {/* Drawer Items */}
+          <div className={`flex items-center gap-2 overflow-hidden transition-all duration-300 ease-in-out ${isDrawerOpen ? 'w-[120px] opacity-100' : 'w-0 opacity-0'}`}>
+            <button 
+                onClick={() => {
+                    addCard({
+                        id: `history-${Date.now()}`,
+                        type: 'history',
+                        title: 'History',
+                        x: window.innerWidth / 2 - 180,
+                        y: window.innerHeight / 2 - 250,
+                        w: 360,
+                        h: 600
+                    })
+                }}
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-700"
+                title="History"
+            >
+                <Clock size={20} />
+            </button>
+
+            <button 
+                onClick={() => {
+                    addCard({
+                        id: `toview-${Date.now()}`,
+                        type: 'toview',
+                        title: 'To View',
+                        x: window.innerWidth / 2 - 180,
+                        y: window.innerHeight / 2 - 250,
+                        w: 360,
+                        h: 600
+                    })
+                }}
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-700"
+                title="To View"
+            >
+                <Bookmark size={20} />
+            </button>
+
+            <button 
+                onClick={() => {
+                    addCard({
+                        id: `favorites-${Date.now()}`,
+                        type: 'favorites',
+                        title: 'Favorites',
+                        x: window.innerWidth / 2 - 180,
+                        y: window.innerHeight / 2 - 250,
+                        w: 360,
+                        h: 600
+                    })
+                }}
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-700"
+                title="Favorites"
+            >
+                <Star size={20} />
+            </button>
+          </div>
+
           <button 
-             onClick={() => {
-                 addCard({
-                     id: `live-${Date.now()}`,
-                     type: 'live',
-                     title: 'Live',
-                     x: window.innerWidth / 2 - 180,
-                     y: window.innerHeight / 2 - 250,
-                     w: 360,
-                     h: 600
-                 })
-             }}
-             className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-700"
-             title="Live"
+             onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+             className={`p-2 hover:bg-gray-100 rounded-xl transition-all duration-300 text-gray-700 ${isDrawerOpen ? 'rotate-45' : 'rotate-0'}`}
+             title="More"
           >
-             <Radio size={20} />
+             <Plus size={20} />
           </button>
 
           <div className="w-px h-6 bg-gray-300 mx-1"></div>
@@ -181,11 +240,11 @@ export const Canvas: React.FC = () => {
           </button>
           
           <button 
-             onClick={toggleLock}
-            className={`p-2 rounded-xl transition-colors text-gray-700 ${isLocked ? 'bg-red-100 text-red-500' : 'hover:bg-gray-100'}`}
-            title={isLocked ? "Unlock Cards" : "Lock Cards"}
+             onClick={() => setIsDockLocked(!isDockLocked)}
+            className={`p-2 rounded-xl transition-colors text-gray-700 ${isDockLocked ? 'bg-red-100 text-red-500' : 'hover:bg-gray-100'}`}
+            title={isDockLocked ? "Unlock Dock" : "Lock Dock Position"}
          >
-            {isLocked ? <Lock size={20} /> : <Unlock size={20} />}
+            {isDockLocked ? <Lock size={20} /> : <Unlock size={20} />}
          </button>
 
          <div className="w-px h-6 bg-gray-300 mx-1"></div>
@@ -201,8 +260,26 @@ export const Canvas: React.FC = () => {
          >
             <LogOut size={20} />
          </button>
+
+         <button 
+            onClick={() => {
+                addCard({
+                    id: `settings-${Date.now()}`,
+                    type: 'settings',
+                    title: 'Settings',
+                    x: window.innerWidth / 2 - 150,
+                    y: window.innerHeight / 2 - 200,
+                    w: 300,
+                    h: 400
+                })
+            }}
+            className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-700"
+            title="Settings"
+         >
+            <Settings size={20} />
+         </button>
       </div>
-      </animated.div>
+    </div>
     </div>
   )
 }

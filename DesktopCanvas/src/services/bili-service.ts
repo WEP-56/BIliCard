@@ -585,6 +585,118 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
   },
 
+  async getFollowedBangumi(vmid: number, page: number = 1): Promise<any[]> {
+      try {
+          const res = await fetch(`https://api.bilibili.com/x/space/bangumi/follow/list?type=1&follow_status=0&pn=${page}&ps=30&vmid=${vmid}`, {
+              headers: getHeaders()
+          })
+          const data = await res.json()
+          if (data.code !== 0 || !data.data || !data.data.list) return []
+          
+          return data.data.list.map((item: any) => ({
+              season_id: item.season_id,
+              title: item.title,
+              cover: item.cover.replace('http:', 'https:'),
+              total_count: item.total_count,
+              is_finish: item.is_finish,
+              new_ep: item.new_ep
+          }))
+      } catch (e) {
+          console.error('getFollowedBangumi error:', e)
+          return []
+      }
+  },
+
+  async getHistory(page: number = 1): Promise<any[]> {
+      try {
+          const res = await fetch(`https://api.bilibili.com/x/web-interface/history/cursor?ps=20&type=archive`, {
+              headers: getHeaders()
+          })
+          const data = await res.json()
+          if (data.code !== 0 || !data.data || !data.data.list) return []
+          
+          return data.data.list.map((item: any) => ({
+              aid: item.history.oid,
+              bvid: item.history.bvid,
+              title: item.title,
+              pic: item.cover.replace('http:', 'https:'),
+              owner: {
+                  name: item.author_name,
+                  mid: item.author_mid,
+                  face: item.author_face.replace('http:', 'https:')
+              },
+              view_at: item.view_at,
+              progress: item.progress,
+              duration: item.duration
+          }))
+      } catch (e) {
+          console.error(e)
+          return []
+      }
+  },
+  
+  async getToView(): Promise<any[]> {
+      try {
+          const res = await fetch('https://api.bilibili.com/x/v2/history/toview', {
+              headers: getHeaders()
+          })
+          const data = await res.json()
+          if (data.code !== 0 || !data.data || !data.data.list) return []
+          
+          return data.data.list.map((item: any) => ({
+              aid: item.aid,
+              bvid: item.bvid,
+              title: item.title,
+              pic: item.pic.replace('http:', 'https:'),
+              owner: item.owner,
+              duration: item.duration,
+              progress: item.progress,
+              add_at: item.add_at
+          }))
+      } catch (e) {
+          console.error('getToView error:', e)
+          return []
+      }
+  },
+
+  async getFavFolders(up_mid: number): Promise<any[]> {
+      try {
+          const res = await fetch(`https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${up_mid}`, {
+              headers: getHeaders()
+          })
+          const data = await res.json()
+          if (data.code !== 0 || !data.data || !data.data.list) return []
+          return data.data.list
+      } catch (e) {
+          console.error('getFavFolders error:', e)
+          return []
+      }
+  },
+
+  async getFavFolderContent(media_id: number, page: number = 1): Promise<any[]> {
+      try {
+          const res = await fetch(`https://api.bilibili.com/x/v3/fav/resource/list?media_id=${media_id}&pn=${page}&ps=20&keyword=&order=mtime&type=0&tid=0&platform=web`, {
+              headers: getHeaders()
+          })
+          const data = await res.json()
+          if (data.code !== 0 || !data.data || !data.data.medias) return []
+          return data.data.medias.map((item: any) => ({
+              id: item.id,
+              title: item.title,
+              cover: item.cover.replace('http:', 'https:'),
+              intro: item.intro,
+              page: item.page,
+              duration: item.duration,
+              upper: item.upper,
+              cnt_info: item.cnt_info,
+              bvid: item.bvid
+          }))
+      } catch (e) {
+          console.error('getFavFolderContent error:', e)
+          return []
+      }
+  },
+
   async sendDanmu(roomId: number | string, message: string): Promise<{ success: boolean, msg: string }> {
     try {
         const cookie = useUserStore.getState().cookie

@@ -1,7 +1,7 @@
 {
   "name": "desktop-canvas",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.2.0",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -23,7 +23,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "public/vite.svg"
+      "icon": "public/icon.png"
     },
     "nsis": {
       "oneClick": false,
