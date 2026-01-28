@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// Pass the live preload path to renderer
+const preloadLivePath = process.argv.find(arg => arg.startsWith('--preload-live='))?.split('=')[1]
+if (preloadLivePath) {
+    contextBridge.exposeInMainWorld('electron_preload_live', preloadLivePath)
+}
+
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(...args: Parameters<typeof ipcRenderer.on>) {
     const [channel, listener] = args

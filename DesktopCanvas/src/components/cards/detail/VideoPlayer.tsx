@@ -44,8 +44,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
       const webview = webviewRef.current
       if (webview && isPlaying) {
           setIsWebviewReady(false) // Reset readiness on play start
-          const injectCSS = async () => {
+          
+          const initPlayer = async () => {
               try {
+                  // 1. First, set a black background to prevent white flashes, but DON'T hide content yet
+                  await webview.insertCSS(`
+                      html, body { background: black !important; }
+                      ::-webkit-scrollbar { width: 0px; background: transparent; }
+                  `)
+
+                  // 2. Wait for the player to be initialized via JS
+                  // We look for the video element and ensure it has dimensions
+                  await webview.executeJavaScript(`
+                      new Promise((resolve) => {
+                          const check = () => {
+                              const video = document.querySelector('video');
+                              const player = document.querySelector('#bilibili-player') || document.querySelector('.bpx-player-container');
+                              
+                              if (video && player && player.clientHeight > 0) {
+                                  resolve();
+                              } else {
+                                  setTimeout(check, 500);
+                              }
+                          }
+                          check();
+                      })
+                  `)
+
+                  // 3. Now that player is ready, apply the "Cropping" CSS
                   await webview.insertCSS(`
                       #bilibili-player {
                           position: fixed !important;
@@ -61,7 +87,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
                       }
                       body {
                           overflow: hidden !important;
-                          background: black !important;
                       }
                       
                       /* Hide Header and Sidebar */
@@ -96,24 +121,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = React.memo(({
                           display: none !important;
                       }
                   `)
-                  // Fade in after CSS injection
-                  setTimeout(() => setIsWebviewReady(true), 100)
+                  
+                  // Fade in
+                  setTimeout(() => setIsWebviewReady(true), 200)
               } catch (e) {
-                  console.error('Failed to inject CSS', e)
-                  setIsWebviewReady(true) // Fallback to show even if error
+                  console.error('Failed to init player', e)
+                  setIsWebviewReady(true)
               }
           }
           
           const handleLoadError = (e: any) => {
               console.error('Webview load error:', e.errorCode, e.errorDescription)
-              setIsWebviewReady(true) // Show webview even if error occurs so user can see it
+              setIsWebviewReady(true) 
           }
 
-          webview.addEventListener('dom-ready', injectCSS)
+          webview.addEventListener('dom-ready', initPlayer)
           webview.addEventListener('did-fail-load', handleLoadError)
           
           return () => { 
-              webview.removeEventListener('dom-ready', injectCSS)
+              webview.removeEventListener('dom-ready', initPlayer)
               webview.removeEventListener('did-fail-load', handleLoadError)
           }
       }

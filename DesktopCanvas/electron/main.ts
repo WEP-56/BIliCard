@@ -5,17 +5,15 @@ import { fileURLToPath } from 'node:url'
 // Disable security warnings
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
-// Ignore certificate errors
-app.commandLine.appendSwitch('ignore-certificate-errors')
-app.commandLine.appendSwitch('ignore-urlfetcher-cert-requests')
-
-// Disable QUIC and HTTP2 to prevent connection resets on some networks (Restored as it was working before)
-app.commandLine.appendSwitch('disable-quic')
-app.commandLine.appendSwitch('disable-http2')
-
 // Relax SameSite constraints for Iframe cookies
-app.commandLine.appendSwitch('disable-features', 'SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure')
+// Note: WebRtcHideLocalIpsWithMdns MUST be disabled to fix .local resolution errors
+app.commandLine.appendSwitch('disable-features', 'SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure,WebRtcHideLocalIpsWithMdns')
 app.commandLine.appendSwitch('disable-site-isolation-trials')
+
+// Disable IPv6 to prevent DNS resolution issues with STUN/WebRTC
+app.commandLine.appendSwitch('enable-features', 'BlockInsecurePrivateNetworkRequests')
+app.commandLine.appendSwitch('enable-quic')
+app.commandLine.appendSwitch('disable-features', 'AsyncDns')
 
 // Disable hardware acceleration to fix video black screen in transparent window
 app.disableHardwareAcceleration()
@@ -50,6 +48,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.mjs'),
       webSecurity: false, 
       webviewTag: true,
+      additionalArguments: [`--preload-live=${path.join(__dirname, 'preload.mjs')}`]
     },
   })
 
@@ -108,6 +107,17 @@ function createWindow() {
     callback(true)
   })
 
+  // Explicitly handle certificate errors to allow self-signed or proxy certificates
+  // This is required for some Bilibili internal APIs and P2P connections
+  app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+    // Log the error for debugging
+    // console.log(`[Certificate Error] URL: ${url}, Error: ${error}, Cert: ${certificate.subject.commonName}`)
+    // Prevent default behavior which is to cancel loading
+    event.preventDefault()
+    // Allow the certificate
+    callback(true)
+  })
+
   // Configure Request Interception for both Default and Webview Sessions
   const configureSession = (sess: Electron.Session) => {
       // Force User-Agent for all requests to avoid Bilibili blocking/handshake issues
@@ -117,11 +127,32 @@ function createWindow() {
       sess.webRequest.onBeforeSendHeaders((details, callback) => {
         const url = details.url
         const headers = details.requestHeaders
+
+        const isRendererRequest = !!headers['X-Bili-Cookie']
+
+        // ======== LIVE: Zero-Hijack / Pass-through ========
+        if (
+            !isRendererRequest && 
+            (
+                url.includes('live.bilibili.com') ||
+                url.includes('api.live.bilibili.com') ||
+                (url.includes('wss://') && url.includes('live')) || 
+                (url.includes('chat.bilibili.com'))
+            )
+        ) {
+            // Ensure Referer/Origin are correct for WebSocket/WebRTC handshake
+            if (url.includes('chat.bilibili.com') || url.includes('wss://')) {
+                headers['Origin'] = 'https://live.bilibili.com'
+                headers['Referer'] = 'https://live.bilibili.com/'
+            }
+            return callback({ requestHeaders: headers })
+        }
+        // =================================================
     
         // Only modify Referer for Bilibili domains
         if (url.includes('bilibili.com')) {
           // Check if this is a request from our Renderer (Custom Header)
-          const isRendererRequest = !!headers['X-Bili-Cookie']
+          // const isRendererRequest = !!headers['X-Bili-Cookie'] // Already defined above
           
           // Check if this is an image load (likely from Canvas)
           const isImage = details.resourceType === 'image'
@@ -225,10 +256,21 @@ function createWindow() {
     
       // Strip X-Frame-Options to allow loading in iframe and inject CORS
       sess.webRequest.onHeadersReceived((details, callback) => {
+        const url = details.url
+
+        // ======== LIVE: Zero-Hijack / Pass-through ========
+        if (
+            url.includes('live.bilibili.com') ||
+            url.includes('api.live.bilibili.com')
+        ) {
+            return callback({ responseHeaders: details.responseHeaders })
+        }
+        // =================================================
+
         const responseHeaders = details.responseHeaders || {}
         
         // Remove X-Frame-Options and CSP to allow iframe loading and script/style injection
-        if (details.url.includes('bilibili.com')) {
+        if (url.includes('bilibili.com')) {
             delete responseHeaders['x-frame-options']
             delete responseHeaders['content-security-policy']
             delete responseHeaders['frame-options']
@@ -253,6 +295,11 @@ function createWindow() {
       app.quit()
   })
 
+  // IPC: Get Cookies (for preload)
+  ipcMain.handle('get-cookies', () => {
+      return globalCookies
+  })
+
   // IPC: Set Cookies
   ipcMain.handle('set-cookie', async (event, cookieString: string) => {
     globalCookies = cookieString
@@ -273,13 +320,14 @@ function createWindow() {
         
         if (name && value) {
                  const isHttpOnly = name === 'SESSDATA' || name === 'DedeUserID__ckMd5'
+                 const isSameSiteNone = name === 'bili_jct' || name === 'buvid3'
                  const baseCookie = {
                     domain: '.bilibili.com',
                     path: '/',
                     name,
                     value,
                     expirationDate: Date.now() / 1000 + 31536000,
-                    sameSite: 'no_restriction',
+                    sameSite: isSameSiteNone ? 'no_restriction' : 'lax', // Use Lax for most, None for JCT/CSRF if needed
                     secure: true,
                     httpOnly: isHttpOnly
                 } as Electron.CookiesSetDetails

@@ -583,5 +583,47 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
           console.error(e)
           return []
       }
+  },
+
+  async sendDanmu(roomId: number | string, message: string): Promise<{ success: boolean, msg: string }> {
+    try {
+        const cookie = useUserStore.getState().cookie
+        const csrfMatch = cookie.match(/bili_jct=([^;]+)/)
+        const csrf = csrfMatch ? csrfMatch[1] : ''
+        
+        if (!csrf) {
+            return { success: false, msg: 'Not logged in (CSRF missing)' }
+        }
+
+        const formData = new URLSearchParams()
+        formData.append('roomid', roomId.toString())
+        formData.append('msg', message)
+        formData.append('csrf', csrf)
+        formData.append('csrf_token', csrf)
+        formData.append('rnd', Math.floor(Date.now() / 1000).toString())
+        formData.append('fontsize', '25')
+        formData.append('color', '16777215')
+        formData.append('mode', '1')
+        formData.append('bubble', '0')
+
+        const res = await fetch('https://api.live.bilibili.com/msg/send', {
+            method: 'POST',
+            headers: {
+                ...getHeaders(),
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData
+        })
+        
+        const data = await res.json()
+        if (data.code === 0) {
+            return { success: true, msg: 'Sent' }
+        } else {
+            return { success: false, msg: data.message || `Error ${data.code}` }
+        }
+    } catch (e: any) {
+        console.error('Send Danmu Error:', e)
+        return { success: false, msg: e.message || 'Network Error' }
+    }
   }
 }
